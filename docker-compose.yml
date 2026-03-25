@@ -18,8 +18,11 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        # Fix permissions on hidden service directories, then drop to tor user
+        # Fix ownership on the hidden service volume and any existing subdirs
+        chown tor:tor /var/lib/tor/hidden_service
+        chmod 700 /var/lib/tor/hidden_service
         for dir in /var/lib/tor/hidden_service/*/; do
+          [ -d "$$dir" ] || continue
           chown -R tor:tor "$$dir"
           chmod 700 "$$dir"
         done
