@@ -1,7 +1,7 @@
 #!/bin/sh
 # add-site.sh — Add a new Tor hidden service for a clearnet domain
 #
-# Usage: ./add-site.sh <name> <domain> [--origin URL] [--port PORT]
+# Usage: ./add-site.sh <name> <domain> [--origin URL] [--port PORT] [--keys PATH]
 #
 #   name      Short identifier (filenames, torrc dir, e.g. "myblog")
 #   domain    Clearnet domain to mirror (e.g. "myblog.com")
@@ -13,11 +13,14 @@
 #                    http://myapp:80                    (container in same network)
 #                    https://origin.example.com         (remote server)
 #   --port PORT    Internal nginx listen port (auto-assigned if omitted)
+#   --keys PATH    Import pre-generated keys (from generate-vanity.sh) instead of
+#                  letting Tor auto-generate a random address
 #
 # Examples:
 #   ./add-site.sh myblog myblog.com
 #   ./add-site.sh wiki wiki.example.org --origin http://mediawiki:80
 #   ./add-site.sh shop shop.example.com --origin https://origin.shop.example.com --port 8005
+#   ./add-site.sh mysite example.com --keys vanity-keys/mysite....onion
 
 set -e
 
@@ -28,6 +31,7 @@ NAME=""
 DOMAIN=""
 ORIGIN="https://host.docker.internal:443"
 PORT=""
+KEYS_DIR=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -37,6 +41,10 @@ while [ $# -gt 0 ]; do
       ;;
     --port)
       PORT="$2"
+      shift 2
+      ;;
+    --keys)
+      KEYS_DIR="$2"
       shift 2
       ;;
     --help|-h)
@@ -62,7 +70,7 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$NAME" ] || [ -z "$DOMAIN" ]; then
-  echo "Usage: $0 <name> <domain> [--origin URL] [--port PORT]"
+  echo "Usage: $0 <name> <domain> [--origin URL] [--port PORT] [--keys PATH]"
   echo "  e.g. $0 myblog myblog.com"
   echo "  e.g. $0 wiki wiki.example.org --origin http://mediawiki:80"
   exit 1
@@ -83,6 +91,21 @@ fi
 if grep -q "HiddenServiceDir /var/lib/tor/hidden_service/$NAME/" "$TORRC" 2>/dev/null; then
   echo "Error: $NAME already exists in torrc" >&2
   exit 1
+fi
+
+# Validate --keys directory if specified
+if [ -n "$KEYS_DIR" ]; then
+  if [ ! -d "$KEYS_DIR" ]; then
+    echo "Error: keys directory not found: $KEYS_DIR" >&2
+    exit 1
+  fi
+  if [ ! -f "$KEYS_DIR/hs_ed25519_secret_key" ]; then
+    echo "Error: $KEYS_DIR/hs_ed25519_secret_key not found" >&2
+    echo "  Expected a directory from generate-vanity.sh containing:" >&2
+    echo "    hs_ed25519_secret_key, hs_ed25519_public_key, hostname" >&2
+    exit 1
+  fi
+  VANITY_ADDR=$(cat "$KEYS_DIR/hostname" 2>/dev/null || true)
 fi
 
 # ---------------------------------------------------------------------------
@@ -118,6 +141,7 @@ echo "  Name:   $NAME"
 echo "  Domain: $DOMAIN"
 echo "  Origin: $ORIGIN"
 echo "  Port:   $PORT"
+[ -n "$VANITY_ADDR" ] && echo "  Vanity: $VANITY_ADDR"
 echo ""
 
 # ---------------------------------------------------------------------------
@@ -212,10 +236,37 @@ HiddenServiceVersion 3
 EOF
 
 echo "Updated $TORRC"
+
+# ---------------------------------------------------------------------------
+# Import vanity keys if specified
+# ---------------------------------------------------------------------------
+if [ -n "$KEYS_DIR" ]; then
+  VOLUME_NAME="tor-onion_tor-keys"
+  echo "Importing vanity keys into Docker volume..."
+  # Use a temporary container to copy keys into the volume
+  docker run --rm \
+    -v "$(cd "$KEYS_DIR" && pwd)":/src:ro \
+    -v "$VOLUME_NAME":/dst \
+    alpine:3.21 sh -c "
+      mkdir -p /dst/$NAME
+      cp /src/hs_ed25519_secret_key /dst/$NAME/
+      cp /src/hs_ed25519_public_key /dst/$NAME/ 2>/dev/null || true
+      cp /src/hostname /dst/$NAME/ 2>/dev/null || true
+      chown -R 100:101 /dst/$NAME
+      chmod 700 /dst/$NAME
+      chmod 600 /dst/$NAME/*
+    "
+  echo "Keys imported."
+  echo ""
+  echo "Your .onion address: $VANITY_ADDR"
+fi
+
 echo ""
 echo "Now run:"
 echo "  docker compose up -d          # picks up new nginx config"
 echo "  docker compose restart tor     # picks up new torrc entry"
-echo ""
-echo "Then get your .onion address:"
-echo "  docker compose exec tor cat /var/lib/tor/hidden_service/$NAME/hostname"
+if [ -z "$KEYS_DIR" ]; then
+  echo ""
+  echo "Then get your .onion address:"
+  echo "  docker compose exec tor cat /var/lib/tor/hidden_service/$NAME/hostname"
+fi

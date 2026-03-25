@@ -89,10 +89,36 @@ Your origin is a separate server accessible over the network.
 
 The onion-proxy will connect to the remote server, set the `Host` header to `example.com`, and rewrite URLs in the response.
 
+## Vanity addresses
+
+Generate a custom `.onion` address prefix instead of a random one:
+
+```bash
+# Generate a vanity address (may take minutes to hours depending on length)
+./generate-vanity.sh mysite
+
+# Use the generated keys when adding a site
+./add-site.sh mysite example.com --keys vanity-keys/mysite<...>.onion
+```
+
+Addresses use **base32** encoding — valid characters are `a-z` and `2-7` only.
+
+| Prefix length | Approximate time |
+|---------------|-----------------|
+| 4 chars | seconds |
+| 5 chars | seconds to minutes |
+| 6 chars | minutes to tens of minutes |
+| 7 chars | hours to days |
+| 8+ chars | impractical |
+
+Options: `--threads N` (CPU threads) and `--count N` (number of addresses to generate).
+
+> **Security**: The `vanity-keys/` directory contains private keys. Treat them like SSH keys — never commit to git (gitignored by default).
+
 ## Adding a site
 
 ```bash
-./add-site.sh <name> <domain> [--origin URL] [--port PORT]
+./add-site.sh <name> <domain> [--origin URL] [--port PORT] [--keys PATH]
 ```
 
 This generates:

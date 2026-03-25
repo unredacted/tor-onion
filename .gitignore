@@ -1,6 +1,9 @@
 # Generated site configs (managed by add-site.sh / remove-site.sh)
 conf.d/*.conf
 
+# Vanity address keys — contain private keys, never commit
+vanity-keys/
+
 # Runtime / OS
 .DS_Store
 *.swp
