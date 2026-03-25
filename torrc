@@ -1,0 +1,20 @@
+# =============================================================================
+# Tor Hidden Services Configuration
+# =============================================================================
+#
+# This file is managed by add-site.sh and remove-site.sh.
+#
+# Each site gets a 3-line block:
+#   HiddenServiceDir /var/lib/tor/hidden_service/<name>/
+#   HiddenServicePort 80 onion-proxy:<port>
+#   HiddenServiceVersion 3
+#
+# The HiddenServiceDir name determines where keys are stored — your .onion
+# address is derived from these keys. Never delete them or you'll lose
+# your .onion address permanently.
+#
+# After changes:
+#   docker compose restart tor
+#   docker compose exec tor cat /var/lib/tor/hidden_service/<name>/hostname
+#
+# =============================================================================

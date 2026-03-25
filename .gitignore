@@ -1,0 +1,11 @@
+# Generated site configs (managed by add-site.sh / remove-site.sh)
+conf.d/*.conf
+
+# Runtime / OS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# LLMs
+AGENTS.md

@@ -1,0 +1,40 @@
+services:
+  onion-proxy:
+    image: nginx:alpine
+    volumes:
+      - ./conf.d:/etc/nginx/conf.d:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    # If your origin is a container, add both services to the same network:
+    # networks:
+    #   - my-app-network
+
+  tor:
+    build:
+      context: .
+      dockerfile: Dockerfile.tor
+    user: root
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Fix permissions on hidden service directories, then drop to tor user
+        for dir in /var/lib/tor/hidden_service/*/; do
+          chown -R tor:tor "$$dir"
+          chmod 700 "$$dir"
+        done
+        exec su -s /bin/sh tor -c "tor -f /etc/tor/torrc"
+    volumes:
+      - ./torrc:/etc/tor/torrc:ro
+      - tor-keys:/var/lib/tor/hidden_service
+    depends_on:
+      - onion-proxy
+    restart: unless-stopped
+
+volumes:
+  tor-keys:
+
+# To connect to a container-based origin, define an external network:
+# networks:
+#   my-app-network:
+#     external: true
